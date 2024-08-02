@@ -1,0 +1,667 @@
+import React, { useState, useEffect, useRef } from "react";
+import { User } from "@nextui-org/react";
+import {
+  getBrandsList,
+  getBrandBranchesList,
+  getChatList,
+  getChatMessages,
+  getUserList,
+  getChatListByUserId,
+} from "../../api/requests";
+import { showNotification } from "../common/headerSlice";
+import { useDispatch } from "react-redux";
+import ChatList from "./component/ChatList";
+import ChatSkeleton from "../chat/component/ChatSkeleton";
+import { Modal, ModalContent, useDisclosure } from "@nextui-org/react";
+import UsersSkeleton from "../chat/component/UsersSkeleton";
+import { useLocation, useSearchParams } from "react-router-dom";
+
+const Index = () => {
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const userId = searchParams.get("userId");
+  console.log(userId);
+
+  const dispatch = useDispatch();
+  const [isUsersLoading, setIsUsersLoading] = useState(false);
+
+  const [getBrandListResponsObj, setGetBrandListResponsObj] = useState([]);
+  const [getUserListResponsObj, setGetUserListResponsObj] = useState([]);
+  const [brandDropDownSearchKeyword, setBrandDropDownSearchKeyword] =
+    useState("");
+  const [selectedBrandForSearch, setSelectedBrandForSearch] = useState(null);
+  const [selectedBranchForSearch, setSelectedBranchForSearch] = useState(null);
+  const [getBrandBranchesListResponsObj, setGetBrandBranchesListResponsObj] =
+    useState([]);
+  const [selectedChatForSearch, setSelectedChatForSearch] = useState(null);
+  const [selectedUserChat, setselectedUserChat] = useState(userId);
+  const [getChatListResponsObj, setGetChatListResponsObj] = useState([]);
+  const [getChatMessagesListResponsObj, setGetChatMessagesListResponsObj] =
+    useState([]);
+  const [selectedGetChatPage, setSelectedChatPage] = useState(1);
+  const [filter, setFilter] = useState("brands"); // New filter state
+  const [isLoading, setIsLoading] = useState(false);
+  const branchSectionRef = useRef(null);
+  const [page, setPage] = useState(1);
+  const {
+    isOpen: isImageOpen,
+    onOpen: onImageOpen,
+    onClose: onImageClose,
+  } = useDisclosure();
+  const [imgSrc, setImgSrc] = useState(null);
+
+  const handleImageClick = (src) => {
+    setImgSrc(src);
+    onImageOpen();
+  };
+
+  const fetchBrandList = async (searchTerm, page = 1) => {
+    setIsUsersLoading(true);
+
+    try {
+      const response = await getBrandsList(searchTerm, page);
+      if (!response?.data?.error) {
+        setGetBrandListResponsObj(response.data.data);
+      } else {
+        dispatch(
+          showNotification({
+            message: `${response.data.error.message}`,
+            status: 0,
+          })
+        );
+      }
+    } catch (error) {
+      console.error(error);
+    }
+    setIsUsersLoading(false);
+  };
+
+  const fetchUserList = async (searchTerm, page = 1) => {
+    setIsUsersLoading(true);
+
+    try {
+      const response = await getUserList(searchTerm, page);
+      if (!response?.data?.error) {
+        setGetUserListResponsObj(response.data.data);
+      } else {
+        dispatch(
+          showNotification({
+            message: `${response.data.error.message}`,
+            status: 0,
+          })
+        );
+      }
+    } catch (error) {
+      console.error(error);
+    }
+    setIsUsersLoading(false);
+  };
+
+  const [selectedGetUsersPage, setSelectedGetUsersPage] = useState(1); // Initial page state for users
+
+  useEffect(() => {
+    if (filter === "users") {
+      fetchUserList(brandDropDownSearchKeyword, selectedGetUsersPage);
+    }
+  }, [brandDropDownSearchKeyword, selectedGetUsersPage, filter]);
+
+  const handleUserLoadMoreBtnClick = () => {
+    setSelectedGetUsersPage((prevPage) => prevPage + 1);
+  };
+
+  const handleUserLoadLessBtnClick = () => {
+    setSelectedGetUsersPage((prevPage) => (prevPage > 1 ? prevPage - 1 : 1));
+  };
+
+  const fetchBrandBranchesList = async () => {
+    setIsUsersLoading(true);
+
+    try {
+      const response = await getBrandBranchesList(selectedBrandForSearch.id);
+      if (!response?.data?.error) {
+        setGetBrandBranchesListResponsObj(response.data.data);
+      } else {
+        dispatch(
+          showNotification({
+            message: `${response.data.error.message}`,
+            status: 0,
+          })
+        );
+      }
+    } catch (error) {}
+    setIsUsersLoading(false);
+  };
+
+  const fetchChatList = async (page = 1) => {
+    setIsUsersLoading(true);
+
+    try {
+      const response = await getChatList(
+        selectedGetChatPage,
+        selectedBrandForSearch.id,
+        selectedBranchForSearch.id
+      );
+      if (!response?.data?.error) {
+        setGetChatListResponsObj(response.data.data);
+      } else {
+        dispatch(
+          showNotification({
+            message: `${response.data.error.message}`,
+            status: 0,
+          })
+        );
+      }
+    } catch (error) {}
+    setIsUsersLoading(false);
+  };
+  const fetchSingleChatList = async (userId) => {
+    setIsUsersLoading(true);
+
+    try {
+      // Ensure userId is correctly passed
+      if (!userId) {
+        throw new Error("User ID is not provided");
+      }
+
+      const response = await getChatListByUserId(userId);
+
+      // Verify response structure
+      if (!response || !response.data || !Array.isArray(response.data)) {
+        throw new Error("Unexpected response structure");
+      }
+
+      // Find the chat associated with the given user ID
+      const selectedChat = response.data.find(
+        (chat) => chat.user.id === userId
+      );
+
+      if (!selectedChat) {
+        throw new Error("Chat not found for the provided user ID");
+      }
+
+      console.log(selectedChat);
+
+      // Fetch messages for the selected chat
+      await fetchChatMessages(selectedChat.id);
+
+      setGetChatListResponsObj(response.data);
+    } catch (error) {
+      console.error("Error fetching single chat list:", error);
+      dispatch(
+        showNotification({
+          message: error.message,
+          status: 0,
+        })
+      );
+    } finally {
+      setIsUsersLoading(false);
+    }
+  };
+
+  const fetchChatMessages = async (chatId) => {
+    setIsLoading(true);
+    try {
+      const response = await getChatMessages(chatId);
+      console.log("Chat messages response:", response); // Add this for debugging
+      if (!response?.data?.error) {
+        setGetChatMessagesListResponsObj(response.data.data);
+      } else {
+        if (response.data.error.code === 404) {
+          dispatch(
+            showNotification({
+              message: "Chat not found.",
+              status: 0,
+            })
+          );
+        } else {
+          dispatch(
+            showNotification({
+              message: `${response.data.error.message}`,
+              status: 0,
+            })
+          );
+        }
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedChatForSearch) {
+      fetchChatMessages(selectedChatForSearch.id);
+    }
+  }, [selectedChatForSearch]);
+
+  const handleLoadMoreBtnClick = () => {
+    setSelectedChatPage((prevValue) => prevValue + 1);
+  };
+
+  const handleLoadLessBtnClick = () => {
+    setSelectedChatPage((prevValue) =>
+      selectedGetChatPage === 1 ? 1 : prevValue - 1
+    );
+  };
+
+  useEffect(() => {
+    if (filter === "brands") {
+      fetchBrandList(brandDropDownSearchKeyword);
+    } else if (filter === "users") {
+      fetchUserList(brandDropDownSearchKeyword);
+    }
+  }, [brandDropDownSearchKeyword, filter]);
+
+  useEffect(() => {
+    fetchBrandList();
+  }, []);
+
+  useEffect(() => {
+    if (selectedBrandForSearch) {
+      fetchBrandBranchesList();
+      setSelectedBranchForSearch(null);
+      setSelectedChatForSearch(null);
+      if (branchSectionRef.current) {
+        branchSectionRef.current.scrollIntoView({ behavior: "smooth" });
+      }
+    }
+  }, [selectedBrandForSearch]);
+
+  useEffect(() => {
+    if (selectedBranchForSearch) {
+      fetchChatList();
+      setSelectedChatForSearch(null);
+    }
+  }, [selectedBranchForSearch]);
+
+  useEffect(() => {
+    fetchChatList();
+  }, [selectedGetChatPage]);
+
+  const handleBrandClick = (brand) => {
+    setSelectedBrandForSearch(brand);
+    setSelectedBranchForSearch(null);
+    setSelectedChatForSearch(null);
+  };
+
+  const handleUserClick = async (chatId) => {
+    console.log("Selected user ID:", chatId);
+    setSelectedChatForSearch(chatId);
+
+    try {
+      const response = await getChatMessages(chatId);
+      if (!response?.data?.error) {
+        setGetChatMessagesListResponsObj(response.data.data);
+      } else {
+        dispatch(
+          showNotification({
+            message: `${response.data.error.message}`,
+            status: 0,
+          })
+        );
+      }
+    } catch (error) {
+      console.error("Error fetching chat messages:", error);
+    }
+  };
+
+  const handleBranchClick = (branch) => {
+    setSelectedBranchForSearch(branch);
+    setSelectedChatForSearch(null);
+  };
+
+  const handleBackToBrands = () => {
+    setSelectedBrandForSearch(null);
+    setSelectedBranchForSearch(null);
+    setSelectedChatForSearch(null);
+  };
+
+  const handleBackToBranches = () => {
+    setSelectedBranchForSearch(null);
+    setSelectedChatForSearch(null);
+  };
+
+  const [branchSearchKeyword, setBranchSearchKeyword] = useState("");
+
+  const filteredBranches = getBrandBranchesListResponsObj.filter((branch) =>
+    branch.name.en.toLowerCase().includes(branchSearchKeyword.toLowerCase())
+  );
+
+  const handleBrandLoadMoreBtnClick = () => {
+    setPage((prevPage) => prevPage + 1);
+  };
+
+  const handleBrandLoadLessBtnClick = () => {
+    setPage((prevPage) => (prevPage > 1 ? prevPage - 1 : 1));
+  };
+
+  useEffect(() => {
+    fetchBrandList(brandDropDownSearchKeyword, page);
+  }, [brandDropDownSearchKeyword, page, filter]);
+
+  return (
+    <div className="flex flex-col lg:flex-row capitalize min-h-[100vh] bg-slate-100">
+      <div
+        className={`w-full lg:w-1/3 p-3 m-3 bg-white rounded-lg max-h-[96vh] overflow-y-scroll scrollbar-hide`}
+      >
+        {!selectedBrandForSearch ? (
+          <aside className=" bg-white  max-w-[100%] overflow-y-scroll scrollbar-hide chat-aside">
+            <div className="flex justify-between items-center sticky top-0 bg-white ">
+              <h2 className="font-bold">
+                {filter === "brands"
+                  ? `${getBrandListResponsObj.length} Brands`
+                  : `${getUserListResponsObj.length} Users`}
+              </h2>
+              <select
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                className="bg-gray-200 p-2 rounded-lg"
+              >
+                <option value="brands">Brands</option>
+                <option value="users">Users</option>
+              </select>
+            </div>
+            <div className="w-full px-6">
+              {" "}
+              <div
+                className="chat-search"
+                style={{
+                  background: "#EEF0F2",
+                  width: "90%",
+                  margin: "10px auto",
+                }}
+              >
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <g id="Outline / Search / Magnifer">
+                    <path
+                      id="Vector"
+                      fill-rule="evenodd"
+                      clip-rule="evenodd"
+                      d="M11.5136 3.03029C6.82756 3.03029 3.02876 6.82909 3.02876 11.5151C3.02876 16.2012 6.82756 20 11.5136 20C16.1997 20 19.9985 16.2012 19.9985 11.5151C19.9985 6.82909 16.1997 3.03029 11.5136 3.03029ZM1.57422 11.5151C1.57422 6.02576 6.02424 1.57574 11.5136 1.57574C17.003 1.57574 21.453 6.02576 21.453 11.5151C21.453 13.9981 20.5426 16.2683 19.0374 18.0104L22.2097 21.1827C22.4937 21.4667 22.4937 21.9272 22.2097 22.2112C21.9257 22.4952 21.4652 22.4952 21.1812 22.2112L18.0088 19.0389C16.2668 20.5441 13.9965 21.4545 11.5136 21.4545C6.02424 21.4545 1.57422 17.0045 1.57422 11.5151Z"
+                      fill="#8292A1"
+                    />
+                  </g>
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={brandDropDownSearchKeyword}
+                  onChange={(e) =>
+                    setBrandDropDownSearchKeyword(e.target.value)
+                  }
+                ></input>
+              </div>
+              <ul className="p-3 mt-3">
+                {isUsersLoading && <UsersSkeleton />}
+                {filter === "brands" ? (
+                  <>
+                    {getBrandListResponsObj.map((brand, index) => (
+                      <li
+                        key={index}
+                        className="flex flex-row justify-between p-3"
+                        onClick={() => handleBrandClick(brand)}
+                      >
+                        <User
+                          name={brand.name.en}
+                          className="capitalize cursor-pointer"
+                          avatarProps={{
+                            src: brand.logo,
+                          }}
+                        />
+                      </li>
+                    ))}
+                    <div className="flex justify-center items-center my-4">
+                      <div className="flex justify-between items-center bg-[#4b108d] p-2 text-white rounded-lg">
+                        <span
+                          className="px-2 text-lg cursor-pointer"
+                          onClick={handleBrandLoadLessBtnClick}
+                        >
+                          &#8592;
+                        </span>
+                        <span className="px-2 text-lg">{page}</span>
+                        <span
+                          className="px-2 text-lg cursor-pointer"
+                          onClick={handleBrandLoadMoreBtnClick}
+                        >
+                          &#8594;
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {getUserListResponsObj.map((user, index, userId) => (
+                      <li
+                        key={index}
+                        className="flex flex-row justify-between p-3"
+                        onClick={() => {
+                          console.log(user);
+                          fetchSingleChatList(user?.id);
+                        }}
+                      >
+                        <User
+                          name={user.fullName}
+                          className="capitalize cursor-pointer"
+                          avatarProps={{ src: user.picture }}
+                        />
+                      </li>
+                    ))}
+                    <div className="flex justify-center items-center my-4">
+                      <div className="flex justify-between items-center bg-[#4b108d] p-2 text-white rounded-lg">
+                        <span
+                          className="px-2 text-lg cursor-pointer"
+                          onClick={handleUserLoadLessBtnClick}
+                        >
+                          &#8592;
+                        </span>
+                        <span className="px-2 text-lg">
+                          {selectedGetUsersPage}
+                        </span>
+                        <span
+                          className="px-2 text-lg cursor-pointer"
+                          onClick={handleUserLoadMoreBtnClick}
+                        >
+                          &#8594;
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </ul>
+            </div>
+          </aside>
+        ) : !selectedBranchForSearch ? (
+          <aside
+            ref={branchSectionRef}
+            className="bg-white max-w-[100%] overflow-y-scroll scrollbar-hide chat-aside"
+          >
+            <button
+              onClick={handleBackToBrands}
+              className="mb-3 p-2 bg-gray-200 rounded-lg flex items-center"
+            >
+              <svg
+                width="32"
+                height="32"
+                viewBox="0 0 32 32"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  fill-rule="evenodd"
+                  clip-rule="evenodd"
+                  d="M27.6667 16C27.6667 16.5523 27.219 17 26.6667 17L7.74763 17L14.0405 23.2929C14.431 23.6834 14.431 24.3166 14.0405 24.7071C13.65 25.0976 13.0168 25.0976 12.6263 24.7071L4.62631 16.7071C4.43877 16.5196 4.33341 16.2652 4.33341 16C4.33341 15.7348 4.43877 15.4804 4.62631 15.2929L12.6263 7.29289C13.0168 6.90237 13.65 6.90237 14.0405 7.29289C14.431 7.68342 14.431 8.31658 14.0405 8.70711L7.74763 15L26.6667 15C27.219 15 27.6667 15.4477 27.6667 16Z"
+                  fill="#353238"
+                />
+              </svg>
+              Back To Brand
+            </button>
+            <h2 className="p-3 font-bold">
+              {filteredBranches.length} Branches
+            </h2>
+
+            <div
+              className="chat-search"
+              style={{
+                background: "#EEF0F2",
+                width: "90%",
+                margin: "10px auto",
+              }}
+            >
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <g id="Outline / Search / Magnifer">
+                  <path
+                    id="Vector"
+                    fill-rule="evenodd"
+                    clip-rule="evenodd"
+                    d="M11.5136 3.03029C6.82756 3.03029 3.02876 6.82909 3.02876 11.5151C3.02876 16.2012 6.82756 20 11.5136 20C16.1997 20 19.9985 16.2012 19.9985 11.5151C19.9985 6.82909 16.1997 3.03029 11.5136 3.03029ZM1.57422 11.5151C1.57422 6.02576 6.02424 1.57574 11.5136 1.57574C17.003 1.57574 21.453 6.02576 21.453 11.5151C21.453 13.9981 20.5426 16.2683 19.0374 18.0104L22.2097 21.1827C22.4937 21.4667 22.4937 21.9272 22.2097 22.2112C21.9257 22.4952 21.4652 22.4952 21.1812 22.2112L18.0088 19.0389C16.2668 20.5441 13.9965 21.4545 11.5136 21.4545C6.02424 21.4545 1.57422 17.0045 1.57422 11.5151Z"
+                    fill="#8292A1"
+                  />
+                </g>
+              </svg>
+              <input
+                type="text"
+                placeholder="Search..."
+                value={branchSearchKeyword}
+                onChange={(e) => setBranchSearchKeyword(e.target.value)}
+              ></input>
+            </div>
+            <ul className="p-3 mt-3">
+              {isUsersLoading && <UsersSkeleton />}
+              {filteredBranches.map((branch, index) => (
+                <li
+                  key={index}
+                  className="flex flex-row justify-between p-3"
+                  onClick={() => handleBranchClick(branch)}
+                >
+                  <User
+                    className="capitalize cursor-pointer"
+                    name={branch.name.en}
+                  />
+                </li>
+              ))}
+            </ul>
+          </aside>
+        ) : !selectedChatForSearch ? (
+          <>
+            {isUsersLoading && <UsersSkeleton />}
+            <ChatList
+              selectedBranchForSearch={selectedBranchForSearch}
+              handleBackToBranches={handleBackToBranches}
+              getChatListResponsObj={getChatListResponsObj}
+              setSelectedChatForSearch={setSelectedChatForSearch}
+              handleLoadMoreBtnClick={handleLoadMoreBtnClick}
+              handleLoadLessBtnClick={handleLoadLessBtnClick}
+              selectedGetChatPage={selectedGetChatPage}
+            />
+          </>
+        ) : (
+          <div className="w-full flex flex-col lg:flex-row">
+            <div className="bg-white max-w-[100%] overflow-y-scroll scrollbar-hide chat-aside">
+              <ChatList
+                selectedBranchForSearch={selectedBranchForSearch}
+                handleBackToBranches={handleBackToBranches}
+                getChatListResponsObj={getChatListResponsObj}
+                setSelectedChatForSearch={setSelectedChatForSearch}
+                handleLoadMoreBtnClick={handleLoadMoreBtnClick}
+                handleLoadLessBtnClick={handleLoadLessBtnClick}
+                selectedGetChatPage={selectedGetChatPage}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {selectedChatForSearch && (
+        <div className="chat-del">
+          <div className="flex flex-row capitalize max-h-[100vh] bg-slate-100 w-[150%]">
+            <aside className="w-full p-3 m-3 flex flex-col justify-between bg-white rounded-3xl h-screen overflow-y-scroll scrollbar-hide chats-details-client">
+              <div className="flex flex-col">
+                <ul className="p-3 mt-3">
+                  {isLoading ? (
+                    <ChatSkeleton />
+                  ) : (
+                    getChatMessagesListResponsObj.map((msg, index) => (
+                      <React.Fragment key={index}>
+                        {msg.messageType === "txt" ||
+                        msg.messageType === "photo" ? (
+                          msg.sender === "branch" ? (
+                            <li className="flex flex-row items-end p-3">
+                              <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center">
+                                <span className="text-gray-600">Bra</span>
+                              </div>
+                              <span className="bubble left branch-message">
+                                {msg.messageType === "txt" ? (
+                                  msg.content
+                                ) : (
+                                  <img
+                                    src={msg.content}
+                                    alt=""
+                                    onClick={() =>
+                                      handleImageClick(msg.content)
+                                    }
+                                    className="cursor-pointer"
+                                  />
+                                )}
+                              </span>
+                            </li>
+                          ) : (
+                            <li className="flex flex-row items-end justify-end p-3">
+                              <div className="flex flex-col items-center">
+                                <span className="bubble right branch-message">
+                                  {msg.messageType === "txt" ? (
+                                    msg.content
+                                  ) : (
+                                    <img
+                                      src={msg.content}
+                                      alt=""
+                                      onClick={() =>
+                                        handleImageClick(msg.content)
+                                      }
+                                      className="cursor-pointer"
+                                    />
+                                  )}
+                                </span>
+                              </div>
+                              <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center">
+                                <span className="text-gray-600">User</span>
+                              </div>
+                            </li>
+                          )
+                        ) : null}
+                      </React.Fragment>
+                    ))
+                  )}
+                </ul>
+              </div>
+            </aside>
+          </div>
+          <Modal
+            className="h-5/6 overflow-scroll"
+            size="2xl"
+            isOpen={isImageOpen}
+            onClose={onImageClose}
+          >
+            <ModalContent className="flex items-center justify-center">
+              <img src={imgSrc} className="w-5/6" alt="Selected" />
+            </ModalContent>
+          </Modal>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Index;
